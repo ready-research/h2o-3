@@ -829,7 +829,7 @@ public class RuleFitTest extends TestUtil {
 
             final Frame fr2 = Scope.track(rfModel.score(fr));
 
-            Assert.assertTrue(rfModel.testJavaScoring(fr,fr2,1e-4));
+            Assert.assertTrue(rfModel.testJavaScoring(fr, fr2, 1e-4));
         } finally {
             Scope.exit();
         }
@@ -864,4 +864,38 @@ public class RuleFitTest extends TestUtil {
         }
     }
     
+    @Test
+    public void testMulticlassWithoutScope() {
+        RuleFitModel rfModel = null;
+        Frame fr = null, fr2 = null;
+        try {
+            fr = parseTestFile("./smalldata/iris/iris_wheader.csv");
+            DKV.put(fr);
+            
+            final RuleFitModel.RuleFitParameters ruleFitParameters = new RuleFitModel.RuleFitParameters();
+            ruleFitParameters._train = fr._key;
+           // ruleFitParameters._distribution = DistributionFamily.laplace; // todo: what to do with laplace? support it?
+            ruleFitParameters._response_column = "class";
+            ruleFitParameters._seed = 0XFEED;
+            ruleFitParameters._model_type = RuleFitModel.ModelType.RULES_AND_LINEAR;
+            ruleFitParameters._max_rule_length = 5;
+            ruleFitParameters._min_rule_length = 1;
+            ruleFitParameters._max_num_rules = 50;
+            
+            rfModel = new RuleFit(ruleFitParameters).trainModel().get();
+            System.out.println("Intercept: \n" + rfModel._output._intercept[0]);
+            System.out.println(rfModel._output._rule_importance);
+            
+            fr2 = rfModel.score(fr);
+
+            Assert.assertTrue(rfModel.testJavaScoring(fr, fr2,1e-4));
+            
+        } finally {
+            if (rfModel != null) {
+                rfModel.remove();
+            }
+            if (fr != null) fr.remove();
+            if (fr2 != null) fr2.remove();
+        }
+    }
 }

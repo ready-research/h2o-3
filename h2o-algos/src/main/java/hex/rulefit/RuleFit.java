@@ -179,6 +179,7 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
             RuleEnsemble ruleEnsemble = null;
             int ntrees = 0;
             TreeStats overallTreeStats = new TreeStats();
+            String[] classNames = null;
             init(true);
             if (error_count() > 0)
                 throw H2OModelBuilderIllegalArgumentException.makeFromBuilder(RuleFit.this);
@@ -210,6 +211,9 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
                         rulesList.addAll(Rule.extractRulesListFromModel(treeModel, modelId, nclasses()));
                         overallTreeStats.mergeWith(treeModel._output._treeStats);
                         ntrees += treeModel._output._ntrees;
+                        if (classNames == null) {
+                            classNames = treeModel._output.classNames();
+                        }
                         treeModel.delete();
                     }
                     long endAllTreesTime = System.nanoTime() - startAllTreesTime;
@@ -218,8 +222,8 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
                     LOG.info("Extracting rules from trees...");
                     ruleEnsemble = new RuleEnsemble(rulesList.toArray(new Rule[] {}));
 
-                    linearTrain.add(ruleEnsemble.createGLMTrainFrame(_train, depths.length, treeParameters._ntrees));
-                    if (_valid != null) linearValid.add(ruleEnsemble.createGLMTrainFrame(_valid, depths.length, treeParameters._ntrees));
+                    linearTrain.add(ruleEnsemble.createGLMTrainFrame(_train, depths.length, treeParameters._ntrees, classNames));
+                    if (_valid != null) linearValid.add(ruleEnsemble.createGLMTrainFrame(_valid, depths.length, treeParameters._ntrees, classNames));
                     dataFromRulesCodes = linearTrain.names();
                 }
 
@@ -274,7 +278,7 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
                 model._output._intercept = getIntercept(glmModel);
 
                 // TODO: add here coverage_count and coverage percent
-                model._output._rule_importance = convertRulesToTable(getRules(glmModel.coefficients(), ruleEnsemble));
+                model._output._rule_importance = convertRulesToTable(getRules(glmModel.coefficients(), ruleEnsemble, model._output.classNames()));
                 
                 model._output._model_summary = generateSummary(glmModel, ruleEnsemble != null ? ruleEnsemble.size() : 0, overallTreeStats, ntrees);
                 
@@ -419,7 +423,7 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
         }
 
 
-        Rule[] getRules(HashMap<String, Double> glmCoefficients, RuleEnsemble ruleEnsemble) {
+        Rule[] getRules(HashMap<String, Double> glmCoefficients, RuleEnsemble ruleEnsemble, String[] classNames) {
             // extract variable-coefficient map (filter out intercept and zero betas)
             Map<String, Double> filteredRules = glmCoefficients.entrySet()
                     .stream()
@@ -430,7 +434,7 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
             Rule rule;
             for (Map.Entry<String, Double> entry : filteredRules.entrySet()) {
                 if (!entry.getKey().startsWith("linear.")) {
-                    rule = ruleEnsemble.getRuleByVarName(entry.getKey().substring(entry.getKey().lastIndexOf(".") + 1));
+                    rule = ruleEnsemble.getRuleByVarName(getVarName(entry.getKey(), classNames));
                 } else {
                     rule = new Rule(null, entry.getValue(), entry.getKey());
                 }
@@ -442,6 +446,21 @@ public class RuleFit extends ModelBuilder<RuleFitModel, RuleFitModel.RuleFitPara
             
             return rules.toArray(new Rule[] {});
         }
+    }
+    
+    private String getVarName(String ruleKey, String[] classNames) {
+        if (nclasses() > 2) {
+            ruleKey = removeClassNameSuffix(ruleKey, classNames);
+        }
+        return ruleKey.substring(ruleKey.lastIndexOf(".") + 1);
+    }
+    
+    private String removeClassNameSuffix(String ruleKey, String[] classNames) {
+        for (int i = 0; i < classNames.length; i++) {
+            if (ruleKey.endsWith(classNames[i]))
+                return ruleKey.substring(0, ruleKey.length() - classNames[i].length() - 1);
+        }
+        return ruleKey;
     }
 
     private TwoDimTable convertRulesToTable(Rule[] rules) {
