@@ -31,12 +31,21 @@ h2o.generic <- function(model_id = NULL,
   # Build parameter list to send to model builder
   parms <- list()
 
-  if (!missing(model_id))
+
+  if (!missing(model_id)) {
     parms$model_id <- model_id
-  if (!missing(model_key))
+  } else if(!missing(path)) {
+    splited <- str_split(path, "/")
+    print(paste("Split model_id", str_split(splited[length(split)-1], ".")[0]))
+    parms$model_id <- str_split(splited[length(split)-1], ".")[0]
+  } else {
+    parms$model_id <- str_split(splited[length(split)-1], ".")[0]
+  }
+  if (!missing(model_key)) {
     parms$model_key <- model_key
-  if (!missing(path))
+  } else if (!missing(path)) {
     parms$path <- path
+  }
 
   # Error check and build model
   model <- .h2o.modelJob('generic', parms, h2oRestApiVersion=3, verbose=FALSE)
