@@ -57,7 +57,7 @@ test {
     testLogging.setShowStandardStreams(true)
 
     reports {
-        html.required = false
+        html.enabled = false
         junitXml.outputPerTestCase = true
     }
 }
